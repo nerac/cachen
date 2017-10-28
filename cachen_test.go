@@ -86,34 +86,3 @@ func TestMaxAge(t *testing.T) {
 // 	// 		rr.Body.String(), expected)
 // 	// }
 // }
-
-func TestCachen_MaxAge(t *testing.T) {
-	type fields struct {
-		cachable     string
-		intermediate string
-		maxAge       uint
-		smaxAge      uint
-	}
-	type args struct {
-		maxage   uint
-		asmaxage []interface{}
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-	}{
-	// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := &Cachen{
-				cachable:     tt.fields.cachable,
-				intermediate: tt.fields.intermediate,
-				maxAge:       tt.fields.maxAge,
-				smaxAge:      tt.fields.smaxAge,
-			}
-			c.MaxAge(tt.args.maxage, tt.args.asmaxage...)
-		})
-	}
-}

@@ -6,19 +6,56 @@ import (
 
 func TestReusableRequestIsCachable(t *testing.T) {
 	cached := New()
-	cached.ReusableRequest(true)
-	if cached.cachable == noStore {
-		t.Error("Reusable request cannot have a nostore")
+	data := cached.ReusableRequest(true).State()
+
+	if data.cachable == noStore {
+		t.Error("Reusable request cannot be " + noStore)
 	}
 }
 
-// func TestRevalidateEachTimeNotSetOnNonReusable(t *testing.T) {
-// 	cached := New()
-// 	cached.ReusableRequest(false).RevalidateEachTime(true)
-// 	if cached.cachable == noCache || cached.cachable == "" {
-// 		t.Error("Non Reusable must be " + noStore)
-// 	}
-// }
+func TestRevalidateEachTimeNotSetOnNonReusable(t *testing.T) {
+	cached := New()
+	data := cached.ReusableRequest(false).RevalidateEachTime(true).State()
+
+	if data.cachable == noCache || data.cachable == "" {
+		t.Error("Non Reusable must be " + noStore + " and it's " + data.cachable)
+	}
+}
+func TestIntermediatesAllowedOrNot(t *testing.T) {
+	cached := New()
+	data := cached.ReusableRequest(true).
+		RevalidateEachTime(true).
+		IntermediatesAllowed(true).State()
+
+	if data.intermediate != public {
+		t.Error("intermediate must be " + public + " and it's" + data.intermediate)
+	}
+
+	ndata := cached.ReusableRequest(true).RevalidateEachTime(true).IntermediatesAllowed(false).State()
+
+	if ndata.intermediate != private {
+		t.Error("intermediate must be " + private + " and it's" + data.intermediate)
+	}
+}
+func TestMaxAge(t *testing.T) {
+	cached := New()
+	cached.ReusableRequest(true).
+		RevalidateEachTime(true).
+		IntermediatesAllowed(true).MaxAge(5 * SECONDS)
+
+	data := cached.State()
+	if data.maxAge != data.smaxAge || data.maxAge != 5*SECONDS {
+		t.Error("Max age cannot be different than smaxage or is not well set")
+	}
+	cached.ReusableRequest(true).
+		RevalidateEachTime(true).
+		IntermediatesAllowed(true).MaxAge(5*SECONDS, 1*MINUTES)
+
+	ndata := cached.State()
+	if ndata.maxAge == ndata.smaxAge || ndata.maxAge != 5*SECONDS || ndata.smaxAge != 1*MINUTES {
+		t.Error("Max age cannot be equal to smaxcache and must save values correctly")
+	}
+}
 
 // func TestHandlerReturn(t *testing.T) {
 
@@ -49,3 +86,34 @@ func TestReusableRequestIsCachable(t *testing.T) {
 // 	// 		rr.Body.String(), expected)
 // 	// }
 // }
+
+func TestCachen_MaxAge(t *testing.T) {
+	type fields struct {
+		cachable     string
+		intermediate string
+		maxAge       uint
+		smaxAge      uint
+	}
+	type args struct {
+		maxage   uint
+		asmaxage []interface{}
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+	// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Cachen{
+				cachable:     tt.fields.cachable,
+				intermediate: tt.fields.intermediate,
+				maxAge:       tt.fields.maxAge,
+				smaxAge:      tt.fields.smaxAge,
+			}
+			c.MaxAge(tt.args.maxage, tt.args.asmaxage...)
+		})
+	}
+}

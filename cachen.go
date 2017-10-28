@@ -1,5 +1,9 @@
 package cachen
 
+import (
+	"fmt"
+)
+
 //State returns the actual state of the object
 type State interface {
 	State() *Cachen
@@ -25,7 +29,13 @@ type Intermediate interface {
 
 //MaxAge interface set up a max age for the cache
 type MaxAge interface {
-	MaxAge(maxage uint, asmaxage ...interface{})
+	MaxAge(maxage uint, asmaxage ...interface{}) Stale
+	State
+}
+
+//Stale interface returns dataset of properties
+type Stale interface {
+	StaleAllowed(stale bool, istale ...interface{})
 	State
 }
 
@@ -39,11 +49,13 @@ const (
 	//DAYS number of seconds in a day
 	DAYS uint = 25 * HOURS
 	//YEAR number of seconds in a year
-	YEAR    uint = 365 * DAYS
-	noStore      = "no-store"
-	noCache      = "no-cache"
-	public       = "public"
-	private      = "private"
+	YEAR            uint = 365 * DAYS
+	noStore              = "no-store"
+	noCache              = "no-cache"
+	public               = "public"
+	private              = "private"
+	revalidate           = "must-revalidate"
+	proxyRevalidate      = "proxy-revalidate"
 )
 
 //Cachen library
@@ -62,6 +74,9 @@ func (c *Cachen) State() *Cachen {
 
 //ReusableRequest forces to evaluate and download each time the cache.
 func (c *Cachen) ReusableRequest(reusable bool) Revalidate {
+
+	c.cacheControl = []string{}
+
 	if !reusable {
 		c.cachable = noStore
 		c.cacheControl = append(c.cacheControl, noStore)
@@ -83,15 +98,17 @@ func (c *Cachen) IntermediatesAllowed(intermediates bool) MaxAge {
 	if c.cachable != noStore {
 		if intermediates {
 			c.intermediate = public
+			c.cacheControl = append(c.cacheControl, public)
 		} else {
 			c.intermediate = private
+			c.cacheControl = append(c.cacheControl, private)
 		}
 	}
 	return c
 }
 
 //MaxAge allows to set how many seconds the cache will still alive, also termediate cache if you want.
-func (c *Cachen) MaxAge(maxage uint, asmaxage ...interface{}) {
+func (c *Cachen) MaxAge(maxage uint, asmaxage ...interface{}) Stale {
 
 	c.maxAge = maxage
 	c.smaxAge = maxage
@@ -102,15 +119,26 @@ func (c *Cachen) MaxAge(maxage uint, asmaxage ...interface{}) {
 			c.smaxAge = smaxage
 		}
 	}
+	c.cacheControl = append(c.cacheControl, fmt.Sprintf("maxage=%d,smaxage=%d", c.maxAge, c.smaxAge))
+	return c
 }
 
-//MaxAge allows to set how many seconds the cache will still alive, also termediate cache if you want.
-func (c *Cachen) StaleAllowed(maxage uint, asmaxage ...interface{}) {
+//StaleAllowed allows browser to use stale content or not.
+func (c *Cachen) StaleAllowed(stale bool, istale ...interface{}) {
 
+	if len(istale) > 0 {
+		sstale, ok := istale[0].(bool)
+		if ok && sstale {
+			c.cacheControl = append(c.cacheControl, proxyRevalidate)
+		}
+	}
+	if stale {
+		c.cacheControl = append(c.cacheControl, revalidate)
+	}
 }
 
-//Handler executes the configuration
-// func (c *Cachen) Handler(w http.ResponseWriter, r *http.Request) {
+//Bind setup http headers correctly
+// func (c *Cachen) Bind(w http.ResponseWriter, r *http.Request) {
 
 // }
 

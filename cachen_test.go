@@ -4,6 +4,16 @@ import (
 	"testing"
 )
 
+//Helper
+func findValue(dataset []string, key string) bool {
+	for _, v := range dataset {
+		if v == key {
+			return true
+		}
+	}
+	return false
+}
+
 func TestReusableRequestIsCachable(t *testing.T) {
 	cached := New()
 	data := cached.ReusableRequest(true).State()
@@ -54,6 +64,34 @@ func TestMaxAge(t *testing.T) {
 	ndata := cached.State()
 	if ndata.maxAge == ndata.smaxAge || ndata.maxAge != 5*SECONDS || ndata.smaxAge != 1*MINUTES {
 		t.Error("Max age cannot be equal to smaxcache and must save values correctly")
+	}
+}
+
+func TestStaleAllowed(t *testing.T) {
+	cached := New()
+	cached.ReusableRequest(true).
+		RevalidateEachTime(true).
+		IntermediatesAllowed(true).MaxAge(5 * SECONDS).StaleAllowed(true)
+
+	ndata := cached.State()
+	if !findValue(ndata.cacheControl, revalidate) {
+		t.Error("Must appear inside cacheControl the property:" + revalidate)
+	}
+	if findValue(ndata.cacheControl, proxyRevalidate) {
+		t.Error("Cannot appear inside cacheControl the property:" + proxyRevalidate)
+	}
+
+	cached.ReusableRequest(true).
+		RevalidateEachTime(true).
+		IntermediatesAllowed(true).MaxAge(5*SECONDS).StaleAllowed(false, true)
+
+	ndata = cached.State()
+	if findValue(ndata.cacheControl, revalidate) {
+		t.Error("Cannot appear inside cacheControl the property:" + revalidate)
+		t.Error(ndata.cacheControl)
+	}
+	if !findValue(ndata.cacheControl, proxyRevalidate) {
+		t.Error("Must appear inside cacheControl the property:" + proxyRevalidate)
 	}
 }
 

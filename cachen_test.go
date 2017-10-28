@@ -1,6 +1,9 @@
 package cachen
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -88,39 +91,54 @@ func TestStaleAllowed(t *testing.T) {
 	ndata = cached.State()
 	if findValue(ndata.cacheControl, revalidate) {
 		t.Error("Cannot appear inside cacheControl the property:" + revalidate)
-		t.Error(ndata.cacheControl)
 	}
 	if !findValue(ndata.cacheControl, proxyRevalidate) {
 		t.Error("Must appear inside cacheControl the property:" + proxyRevalidate)
 	}
 }
 
-// func TestHandlerReturn(t *testing.T) {
+func TestEtag(t *testing.T) {
+	cached := New()
+	cached.ReusableRequest(true).
+		RevalidateEachTime(true).
+		IntermediatesAllowed(true).MaxAge(5 * SECONDS).StaleAllowed(true).Etag("rd2d")
 
-// 	cached := New()
+	ndata := cached.State()
+	if ndata.etag != "rd2d" {
+		t.Error("Must have an etag correctly set")
+	}
+}
 
-// 	req, err := http.NewRequest("GET", "/", nil)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+func TestHandlerReturn(t *testing.T) {
 
-// 	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
-// 	rr := httptest.NewRecorder()
-// 	handler := http.HandlerFunc(cached.Handler)
+	cached := New()
 
-// 	// Our handlers satisfy http.Handler, so we can call their ServeHTTP method
-// 	// directly and pass in our Request and ResponseRecorder.
-// 	handler.ServeHTTP(rr, req)
+	req, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	if status := rr.Code; status != http.StatusOK {
-// 		t.Errorf("handler returned wrong status code: got %v want %v",
-// 			status, http.StatusOK)
-// 	}
+	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(cached.ReusableRequest(true).
+		RevalidateEachTime(true).
+		IntermediatesAllowed(true).MaxAge(5 * SECONDS).StaleAllowed(false).Etag("rd2d").Bind)
 
-// 	// // Check the response body is what we expect.
-// 	// expected := `{"alive": true}`
-// 	// if rr.Body.String() != expected {
-// 	// 	t.Errorf("handler returned unexpected body: got %v want %v",
-// 	// 		rr.Body.String(), expected)
-// 	// }
-// }
+	// Our handlers satisfy http.Handler, so we can call their ServeHTTP method
+	// directly and pass in our Request and ResponseRecorder.
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+	etag := rr.Header().Get("Etag")
+	if etag != "rd2d" {
+		t.Error("Etag is not returned as a header")
+	}
+	cc := rr.Header().Get("Cache-Control")
+	ccs := strings.Split(cc, ",")
+	if !findValue(ccs, "no-cache") || !findValue(ccs, "public") || !findValue(ccs, "maxage=5") || !findValue(ccs, "smaxage=5") {
+		t.Errorf("One or more cache keys are missing: %v", cc)
+	}
+}

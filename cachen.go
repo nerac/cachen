@@ -2,6 +2,8 @@ package cachen
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
 )
 
 //State returns the actual state of the object
@@ -9,10 +11,16 @@ type State interface {
 	State() *Cachen
 }
 
+//Bind returns the method to bind the cache
+type Bind interface {
+	Bind(w http.ResponseWriter, r *http.Request)
+}
+
 //Reusable interface forces to
 type Reusable interface {
 	ReusableRequest(reusable bool) Revalidate
 	State
+	Bind
 }
 
 //Revalidate interface forces to revalidate the cache before checking intermediation
@@ -35,7 +43,13 @@ type MaxAge interface {
 
 //Stale interface returns dataset of properties
 type Stale interface {
-	StaleAllowed(stale bool, istale ...interface{})
+	StaleAllowed(stale bool, istale ...interface{}) Etag
+	State
+}
+
+//Etag interface to setup the etag
+type Etag interface {
+	Etag(etag string) Bind
 	State
 }
 
@@ -61,6 +75,7 @@ const (
 //Cachen library
 type Cachen struct {
 	cacheControl []string
+	etag         string
 	cachable     string
 	intermediate string
 	maxAge       uint
@@ -109,38 +124,53 @@ func (c *Cachen) IntermediatesAllowed(intermediates bool) MaxAge {
 
 //MaxAge allows to set how many seconds the cache will still alive, also termediate cache if you want.
 func (c *Cachen) MaxAge(maxage uint, asmaxage ...interface{}) Stale {
+	if c.cachable != noStore {
+		c.maxAge = maxage
+		c.smaxAge = maxage
 
-	c.maxAge = maxage
-	c.smaxAge = maxage
-
-	if len(asmaxage) > 0 {
-		smaxage, ok := asmaxage[0].(uint)
-		if ok {
-			c.smaxAge = smaxage
+		if len(asmaxage) > 0 {
+			smaxage, ok := asmaxage[0].(uint)
+			if ok {
+				c.smaxAge = smaxage
+			}
 		}
+		c.cacheControl = append(c.cacheControl, fmt.Sprintf("maxage=%d,smaxage=%d", c.maxAge, c.smaxAge))
 	}
-	c.cacheControl = append(c.cacheControl, fmt.Sprintf("maxage=%d,smaxage=%d", c.maxAge, c.smaxAge))
 	return c
 }
 
 //StaleAllowed allows browser to use stale content or not.
-func (c *Cachen) StaleAllowed(stale bool, istale ...interface{}) {
-
-	if len(istale) > 0 {
-		sstale, ok := istale[0].(bool)
-		if ok && sstale {
-			c.cacheControl = append(c.cacheControl, proxyRevalidate)
+func (c *Cachen) StaleAllowed(stale bool, istale ...interface{}) Etag {
+	if c.cachable != noStore {
+		if len(istale) > 0 {
+			sstale, ok := istale[0].(bool)
+			if ok && sstale {
+				c.cacheControl = append(c.cacheControl, proxyRevalidate)
+			}
+		}
+		if stale {
+			c.cacheControl = append(c.cacheControl, revalidate)
 		}
 	}
-	if stale {
-		c.cacheControl = append(c.cacheControl, revalidate)
-	}
+	return c
 }
 
-//Bind setup http headers correctly
-// func (c *Cachen) Bind(w http.ResponseWriter, r *http.Request) {
+//Etag setups an etag
+func (c *Cachen) Etag(etag string) Bind {
+	if c.cachable != noStore {
+		c.etag = etag
+	}
+	return c
+}
 
-// }
+//Bind setups http headers correctly
+func (c *Cachen) Bind(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Cache-Control", strings.Join(c.cacheControl, ","))
+	if c.etag != "" {
+		w.Header().Set("Etag", c.etag)
+	}
+}
 
 //New returns an instance of cachen
 func New() Reusable {
